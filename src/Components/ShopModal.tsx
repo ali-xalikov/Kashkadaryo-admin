@@ -1,4 +1,4 @@
-import type { Shop } from "../types/shop";
+import type { Shop } from "../pages/MainPage";
 
 type Props = {
   shop: Shop;

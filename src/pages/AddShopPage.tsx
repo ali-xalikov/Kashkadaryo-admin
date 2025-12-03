@@ -143,7 +143,7 @@ export const AddShopPage = () => {
 
           {lat && lng && (
             <div className="rounded-2xl overflow-hidden shadow-lg h-64">
-              <YMaps query={{ lang: "uz_UZ", load: "package.full" }}>
+              <YMaps query={{ lang: "ru_RU", load: "package.full" }}>
                 <Map
                   width="100%"
                   height="100%"

@@ -27,7 +27,7 @@ export const MapComponent = ({
     shops.filter((s) => s.district_id === id);
 
   return (
-    <YMaps query={{ lang: "uz_UZ" }}>
+    <YMaps query={{ lang: "ru_RU" }}>
       <Map
         width="100%"
         height="100%"
