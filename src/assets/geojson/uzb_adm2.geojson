@@ -1,0 +1,63 @@
+// src/data/districts.ts
+export type District = {
+  id: number;
+  name: string;
+  center: [number, number];
+  boundary: [number, number][];
+  shops: any[];
+};
+
+const districtNames: { [key: string]: string } = {
+  "Qarshi City": "Qarshi shahri",
+  "Shahrisabz City": "Shahrisabz shahri",
+  "Chiroqchi District": "Chiroqchi tumani",
+  "Dehqonobod District": "Dehqonobod tumani",
+  "G‘uzor District": "G‘uzor tumani",
+  "Qarshi District": "Qarshi tumani",
+  "Kasbi District": "Kasbi tumani",
+  "Kitob District": "Kitob tumani",
+  "Koson District": "Koson tumani",
+  "Mirishkor District": "Mirishkor tumani",
+  "Muborak District": "Muborak tumani",
+  "Nishon District": "Nishon tumani",
+  "Qamashi District": "Qamashi tumani",
+  "Yakkabog‘ District": "Yakkabog‘ tumani",
+};
+
+export const loadQashqadaryoDistricts = async (): Promise<District[]> => {
+  try {
+    const response = await fetch("https://raw.githubusercontent.com/uzdevid/qashqadaryo-geojson/main/qashqadaryo.geojson");
+    const geojson = await response.json();
+
+    return geojson.features.map((feature: any, index: number) => {
+      const coords = feature.geometry.coordinates[0][0] as [number, number][];
+
+      // Har 6-nuqtadan birini olish — xaritada silliq va tez ishlaydi
+      const simplified = coords.filter((_: any, i: number) => i % 6 === 0);
+
+      // Markazni hisoblash
+      const center: [number, number] = [
+        coords.reduce((a: number, b: [number, number]) => a + b[0], 0) / coords.length,
+        coords.reduce((a: number, b: [number, number]) => a + b[1], 0) / coords.length,
+      ];
+
+      const engName = feature.properties.NAME_2 || feature.properties.name;
+      const uzName = districtNames[engName] || engName;
+
+      return {
+        id: index + 1,
+        name: uzName,
+        center,
+        boundary: simplified.length > 5 ? simplified : coords.slice(0, 50), // minimal 5 nuqta
+        shops: [],
+      };
+    });
+  } catch (err) {
+    console.error("GeoJSON yuklanmadi:", err);
+    // Fallback — hech bo‘lmaganda loyiha ishlaydi
+    return [
+      { id: 1, name: "Qarshi shahri", center: [38.861, 65.785], boundary: [[38.85,65.75],[38.87,65.82],[38.88,65.81],[38.875,65.78],[38.85,65.75]], shops: [] },
+      { id: 9, name: "Koson tumani", center: [39.04, 65.58], boundary: [[39.15,65.45],[39.12,65.75],[38.95,65.70],[38.90,65.50],[39.15,65.45]], shops: [] },
+    ];
+  }
+};
