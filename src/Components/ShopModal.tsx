@@ -1,122 +1,306 @@
-import type { Shop } from "../pages/MainPage";
-import { useRef, useEffect } from "react";
+import { useState, useRef } from "react";
+import { supabase } from "../lib/supabase";
+import districtsData from "../data/districts";
+
+type Shop = {
+  id: number;
+  name: string;
+  lat: number;
+  lng: number;
+  price_per_kg: number;
+  district_id: number;
+  image_url?: string | null;
+};
 
 type Props = {
   shop: Shop;
   onClose: () => void;
   onDelete: () => void;
+  onUpdate: () => void;
 };
 
-export const ShopModal = ({ shop, onClose, onDelete }: Props) => {
-  const touchStartY = useRef<number | null>(null);
+export default function ShopModal({
+  shop,
+  onClose,
+  onDelete,
+  onUpdate,
+}: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
-  const openYandex = () =>
-    window.open(
-      `https://yandex.uz/maps/?text=${shop.lat},${shop.lng}&z=17`,
-      "_blank"
+  const [editName, setEditName] = useState(shop.name);
+  const [editDistrictId, setEditDistrictId] = useState(
+    shop.district_id.toString()
+  );
+  const [editLat, setEditLat] = useState(shop.lat.toString());
+  const [editLng, setEditLng] = useState(shop.lng.toString());
+  const [editPrice, setEditPrice] = useState(shop.price_per_kg.toString());
+
+  const [newImage, setNewImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(
+    shop.image_url || null
+  );
+  const [removeImage, setRemoveImage] = useState(false);
+
+  const [saving, setSaving] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
+
+  // GPS
+  const getCurrentLocation = () => {
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setEditLat(pos.coords.latitude.toFixed(6));
+        setEditLng(pos.coords.longitude.toFixed(6));
+        setGettingLocation(false);
+      },
+      () => {
+        alert("GPS topilmadi");
+        setGettingLocation(false);
+      },
+      { enableHighAccuracy: true }
     );
+  };
 
-  const price = shop.price_per_kg ?? 0;
+  // Saqlash
+  const handleSave = async () => {
+    setSaving(true);
 
-  useEffect(() => {
-    const modal = modalRef.current;
-    if (!modal) return;
+    let finalImageUrl = removeImage ? null : shop.image_url;
 
-    const handleTouchStart = (e: TouchEvent) => {
-      const touchY = e.touches[0].clientY;
-      if (touchY < 100) {
-        touchStartY.current = touchY;
-      }
-    };
+    if (newImage) {
+      const safeName = newImage.name
+        .replace(/\s+/g, "_")
+        .replace(/[^a-zA-Z0-9_.-]/g, "");
+      const fileExt = safeName.split(".").pop()?.toLowerCase() || "jpg";
+      const fileName = `${shop.id}.${fileExt}`;
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (touchStartY.current === null) return;
+      const { error: uploadError } = await supabase.storage
+        .from("shop-images")
+        .upload(fileName, newImage, { upsert: true });
 
-      const currentY = e.touches[0].clientY;
-      const deltaY = currentY - touchStartY.current;
-
-      if (deltaY > 0) {
-        modal.style.transform = `translateY(${deltaY}px)`;
-        modal.style.transition = "none";
-      }
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (touchStartY.current === null) return;
-
-      const currentY = e.changedTouches[0].clientY;
-      const deltaY = currentY - touchStartY.current;
-
-      if (deltaY > 100) {
-        modal.style.transform = "translateY(100%)";
-        modal.style.transition = "transform 0.3s ease-out";
-        setTimeout(onClose, 300);
-      } else {
-        // Orqaga qaytarish animatsiyasi
-        modal.style.transform = "translateY(0)";
-        modal.style.transition = "transform 0.3s ease-out";
+      if (uploadError) {
+        alert("Rasm yuklashda xato: " + uploadError.message);
+        setSaving(false);
+        return;
       }
 
-      touchStartY.current = null;
-    };
+      const { data } = supabase.storage
+        .from("shop-images")
+        .getPublicUrl(fileName);
+      finalImageUrl = data.publicUrl;
+    }
 
-    modal.addEventListener("touchstart", handleTouchStart);
-    modal.addEventListener("touchmove", handleTouchMove);
-    modal.addEventListener("touchend", handleTouchEnd);
+    const { error } = await supabase
+      .from("shops")
+      .update({
+        name: editName,
+        district_id: parseInt(editDistrictId),
+        lat: parseFloat(editLat),
+        lng: parseFloat(editLng),
+        price_per_kg: parseInt(editPrice),
+        image_url: finalImageUrl,
+      })
+      .eq("id", shop.id);
 
-    return () => {
-      modal.removeEventListener("touchstart", handleTouchStart);
-      modal.removeEventListener("touchmove", handleTouchMove);
-      modal.removeEventListener("touchend", handleTouchEnd);
-    };
-  }, [onClose]);
+    setSaving(false);
+    if (error) {
+      alert("Saqlashda xato: " + error.message);
+    } else {
+      onUpdate();
+      setIsEditing(false);
+    }
+  };
 
   return (
-    <div
-      ref={modalRef}
-      className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl p-6 z-50 transform transition-transform duration-300"
-      style={{ transform: "translateY(0)" }}
-    >
-      <div className="w-16 h-1.5 bg-gray-300 rounded-full mx-auto mb-6 cursor-grab active:cursor-grabbing" />
-
-      {shop.image_url ? (
-        <img
-          src={shop.image_url}
-          alt={shop.name}
-          className="w-full h-64 object-cover rounded-2xl mb-4 shadow-lg"
-        />
-      ) : (
-        <div className="w-full h-64 bg-gray-200 rounded-2xl mb-4 flex items-center justify-center">
-          <span className="text-gray-500 text-xl">Rasm yo‘q</span>
-        </div>
-      )}
-
-      <h3 className="text-2xl font-bold text-center mb-2">{shop.name}</h3>
-      <p className="text-xl text-center text-green-600 font-bold mb-8">
-        {price.toLocaleString()} so'm/kg
-      </p>
-
-      <button
-        onClick={openYandex}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-5 rounded-2xl text-xl mb-3 transition"
+    <>
+      <div className="fixed inset-0 bg-black/60 z-40" onClick={onClose} />
+      <div
+        ref={modalRef}
+        className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl p-6 z-50 max-h-screen overflow-y-auto"
       >
-        Yandexda ochish
-      </button>
+        <div className="w-12 h-1.5 bg-gray-400 rounded-full mx-auto mb-6 cursor-pointer" onClick={onClose} />
 
-      <button
-        onClick={onDelete}
-        className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl text-lg transition"
-      >
-        Do‘konni o‘chirish
-      </button>
+        {isEditing ? (
+          <div className="space-y-5">
+            <h2 className="text-2xl font-bold text-center text-indigo-700">
+              Do'konni tahrirlash
+            </h2>
 
-      <button
-        onClick={onClose}
-        className="w-full mt-4 text-gray-600 font-bold text-lg"
-      >
-        Yopish
-      </button>
-    </div>
+            {/* Rasm yuklash / olib tashlash */}
+            <div className="text-center">
+              {imagePreview && !removeImage ? (
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="w-full h-64 object-cover rounded-2xl mb-4 shadow-lg"
+                />
+              ) : (
+                <div className="w-full h-64 bg-gray-200 rounded-2xl mb-4 flex items-center justify-center">
+                  <span className="text-gray-500 text-xl">Rasm yoʻq</span>
+                </div>
+              )}
+
+              <div className="flex justify-center gap-3">
+                <label className="cursor-pointer inline-block bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-xl font-bold text-lg">
+                  Rasmni o'zgartirish
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setNewImage(file);
+                        setImagePreview(URL.createObjectURL(file));
+                        setRemoveImage(false);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </label>
+
+                {imagePreview && !removeImage && (
+                  <button
+                    type="button"
+                    onClick={() => setRemoveImage(true)}
+                    className="bg-red-600 hover:bg-red-700 text-white py-3 px-6 rounded-xl font-bold text-lg"
+                  >
+                    Rasmni olib tashlash
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Do'kon nomi */}
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="Do'kon nomi"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl"
+            />
+
+            {/* Tuman */}
+            <select
+              value={editDistrictId}
+              onChange={(e) => setEditDistrictId(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl"
+            >
+              <option value="">Tumanni tanlang</option>
+              {districtsData.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+
+            {/* GPS */}
+            <button
+              onClick={getCurrentLocation}
+              disabled={gettingLocation}
+              className={`w-full py-4 rounded-xl text-white font-bold ${
+                gettingLocation
+                  ? "bg-gray-400"
+                  : "bg-green-600 hover:bg-green-700"
+              }`}
+            >
+              {gettingLocation ? "Aniqlanmoqda..." : "Mening joylashuvim"}
+            </button>
+
+            <div className="grid grid-cols-2 gap-4">
+              <input
+                type="text"
+                value={editLat}
+                onChange={(e) => setEditLat(e.target.value)}
+                placeholder="Latitude"
+                className="px-4 py-3 border-2 rounded-xl"
+              />
+              <input
+                type="text"
+                value={editLng}
+                onChange={(e) => setEditLng(e.target.value)}
+                placeholder="Longitude"
+                className="px-4 py-3 border-2 rounded-xl"
+              />
+            </div>
+
+            <input
+              type="number"
+              value={editPrice}
+              onChange={(e) => setEditPrice(e.target.value)}
+              placeholder="Narx (so'm/kg)"
+              className="w-full px-4 py-3 border-2 rounded-xl"
+            />
+
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold"
+            >
+              {saving ? "Saqlanmoqda..." : "Saqlash"}
+            </button>
+
+            <button
+              onClick={() => setIsEditing(false)}
+              className="w-full bg-gray-500 hover:bg-gray-600 text-white py-4 rounded-xl font-bold"
+            >
+              Bekor qilish
+            </button>
+          </div>
+        ) : (
+          <>
+            {shop.image_url ? (
+              <img
+                src={shop.image_url}
+                alt={shop.name}
+                className="w-full h-64 object-cover rounded-2xl mb-4 shadow-lg"
+              />
+            ) : (
+              <div className="w-full h-64 bg-gray-200 rounded-2xl mb-4 flex items-center justify-center">
+                <span className="text-gray-500 text-xl">Rasm yoʻq</span>
+              </div>
+            )}
+
+            <h3 className="text-2xl font-bold text-center mb-2">{shop.name}</h3>
+            <p className="text-xl text-center text-green-600 font-bold mb-8">
+              {shop.price_per_kg.toLocaleString()} so'm/kg
+            </p>
+
+            <button
+              onClick={() =>
+                window.open(
+                  `https://yandex.uz/maps/?text=${shop.lat},${shop.lng}&z=17`,
+                  "_blank"
+                )
+              }
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-5 rounded-2xl text-xl mb-3"
+            >
+              Yandexda ochish
+            </button>
+
+            <button
+              onClick={() => setIsEditing(true)}
+              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-4 rounded-2xl text-lg mb-2"
+            >
+              Tahrirlash
+            </button>
+
+            <button
+              onClick={onDelete}
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl text-lg mb-2"
+            >
+              Doʻkonni oʻchirish
+            </button>
+
+            <button
+              onClick={onClose}
+              className="w-full text-gray-600 font-bold text-lg"
+            >
+              Yopish
+            </button>
+          </>
+        )}
+      </div>
+    </>
   );
-};
+}

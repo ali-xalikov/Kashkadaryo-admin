@@ -175,3 +175,4 @@ export const districtsData: District[] = [
     ],
   },
 ];
+export default districtsData
